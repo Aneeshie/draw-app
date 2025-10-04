@@ -51,3 +51,16 @@ export async function createRoom(userId: string, name: string) {
     return null;
   }
 }
+
+export function saveMessage(roomId: number, userId: string, content: string) {
+  return prismaClient.message.create({
+    data: {
+      roomId,
+      userId,
+      content,
+    },
+    include: {
+      user: { select: { id: true, name: true } },
+    },
+  });
+}
