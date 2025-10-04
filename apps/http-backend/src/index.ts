@@ -1,8 +1,13 @@
 import express from "express";
 import { middleware } from "./middleware";
-import jwt from "jsonwebtoken";
-import { prismaClient } from "@repo/db/db";
-import bcrypt from "bcrypt";
+import jwt, { TokenExpiredError } from "jsonwebtoken";
+import {
+  prismaClient,
+  createUser,
+  checkExistingUser,
+  createRoom,
+} from "@repo/db/db";
+import bcrypt, { hash } from "bcrypt";
 
 import {
   SignInSchema,
@@ -26,13 +31,11 @@ app.post("/signup", async (req, res) => {
   const hashedPassword = await bcrypt.hash(parseResult.data.password, 10);
 
   try {
-    const user = await prismaClient.user.create({
-      data: {
-        email: parseResult.data.email,
-        password: hashedPassword,
-        name: parseResult.data.username,
-      },
-    });
+    const user = await createUser(
+      parseResult.data.email,
+      parseResult.data.username,
+      hashedPassword,
+    );
 
     if (!user) {
       return res.status(500).json({ error: "Could not create user" });
@@ -68,26 +71,22 @@ app.post("/signin", async (req, res) => {
   }
 
   try {
-    const user = await prismaClient.user.findUnique({
-      where: {
-        email: parseResult.data.email,
-      },
-    });
+    const existinguser = await checkExistingUser(parseResult.data.email);
 
-    if (!user) {
+    if (!existinguser) {
       return res.status(400).json({ error: "Invalid credentials" });
     }
 
     const isPasswordValid = await bcrypt.compare(
       parseResult.data.password,
-      user.password,
+      existinguser.password,
     );
 
     if (!isPasswordValid) {
       return res.status(400).json({ error: "Invalid credentials" });
     }
 
-    req.userId = user.id;
+    req.userId = existinguser.id;
 
     const token = jwt.sign({ userId: req.userId }, secretKey, {
       expiresIn: "7d",
@@ -119,18 +118,13 @@ app.post("/room", middleware, async (req, res) => {
   }
 
   try {
-    const room = await prismaClient.room.create({
-      data: {
-        name: parseResult.data.name,
-      },
-    });
+    const room = await createRoom(req.userId!, parseResult.data.name);
 
-    await prismaClient.userRoom.create({
-      data: {
-        userId: req.userId!,
-        roomId: room.id,
-      },
-    });
+    if (!room) {
+      return res
+        .status(500)
+        .json({ error: "Could not create room check func" });
+    }
 
     return res.status(201).json({ success: true, data: room });
   } catch (e) {
