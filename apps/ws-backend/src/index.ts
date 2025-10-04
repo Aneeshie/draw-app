@@ -44,10 +44,25 @@ async function saveMessage(roomId: number, userId: string, content: string) {
 }
 
 async function joinRoom(roomId: number, ws: MyWebSocket) {
-  const exists = await checkRoomExists(roomId);
+  if (!ws.user) {
+    sendResponse(ws, "error", { message: "Unauthorized" });
+    return;
+  }
 
+  const exists = await checkRoomExists(roomId);
   if (!exists) {
     sendResponse(ws, "error", { message: `Room ${roomId} does not exist` });
+    return;
+  }
+
+  const userInRoom = await prismaClient.userRoom.findFirst({
+    where: { roomId, userId: ws.user.userId },
+  });
+
+  if (!userInRoom) {
+    sendResponse(ws, "error", {
+      message: `You are not a member of room ${roomId}`,
+    });
     return;
   }
 
