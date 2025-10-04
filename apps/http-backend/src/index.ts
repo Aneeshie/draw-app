@@ -1,13 +1,14 @@
 import express from "express";
 import { middleware } from "./middleware";
-import jwt, { TokenExpiredError } from "jsonwebtoken";
+import jwt from "jsonwebtoken";
 import {
   prismaClient,
   createUser,
   checkExistingUser,
   createRoom,
+  getRoom,
 } from "@repo/db/db";
-import bcrypt, { hash } from "bcrypt";
+import bcrypt from "bcrypt";
 
 import {
   SignInSchema,
@@ -131,6 +132,36 @@ app.post("/room", middleware, async (req, res) => {
     console.log(e);
     return res.status(500).json({ error: "Could not create room" });
   }
+});
+
+app.get("/room/:id", middleware, async (req, res) => {
+  const roomId = Number(req.params.id);
+
+  const room = await getRoom(roomId);
+
+  if (!room) return res.status(404).json({ error: "Room not found" });
+
+  const isMember = await prismaClient.userRoom.findFirst({
+    where: { roomId, userId: req.userId },
+  });
+  if (!isMember)
+    return res.status(403).json({ error: "You are not a member of this room" });
+
+  res.status(200).json({ success: true, data: room });
+});
+
+app.delete("/room/:id", middleware, async (req, res) => {
+  const roomId = Number(req.params.id);
+
+  const room = await prismaClient.room.findUnique({ where: { id: roomId } });
+  if (!room) return res.status(404).json({ error: "Room not found" });
+
+  await prismaClient.room.delete({ where: { id: roomId } });
+
+  await prismaClient.userRoom.deleteMany({ where: { roomId } });
+  await prismaClient.message.deleteMany({ where: { roomId } });
+
+  res.status(200).json({ success: true, message: "Room deleted successfully" });
 });
 
 app.listen(3001, () => {

@@ -64,3 +64,11 @@ export function saveMessage(roomId: number, userId: string, content: string) {
     },
   });
 }
+
+export async function getRoom(roomId: number) {
+  const room = await prismaClient.room.findUnique({
+    where: { id: roomId },
+  });
+
+  return room;
+}
